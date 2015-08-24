@@ -46,6 +46,7 @@ import com.facebook.imagepipeline.producers.LocalVideoThumbnailProducer;
 import com.facebook.imagepipeline.producers.NetworkFetchProducer;
 import com.facebook.imagepipeline.producers.NetworkFetcher;
 import com.facebook.imagepipeline.producers.NullProducer;
+import com.facebook.imagepipeline.producers.PostprocessedBitmapMemoryCacheProducer;
 import com.facebook.imagepipeline.producers.PostprocessorProducer;
 import com.facebook.imagepipeline.producers.Producer;
 import com.facebook.imagepipeline.producers.ResizeAndRotateProducer;
@@ -65,6 +66,7 @@ public class ProducerFactory {
   private final ImageDecoder mImageDecoder;
   private final ProgressiveJpegConfig mProgressiveJpegConfig;
   private final boolean mDownsampleEnabled;
+  private final boolean mResizeAndRotateEnabledForNetwork;
 
   // Dependencies used by multiple steps
   private final ExecutorSupplier mExecutorSupplier;
@@ -86,6 +88,7 @@ public class ProducerFactory {
       ImageDecoder imageDecoder,
       ProgressiveJpegConfig progressiveJpegConfig,
       boolean downsampleEnabled,
+      boolean resizeAndRotateEnabledForNetwork,
       ExecutorSupplier executorSupplier,
       PooledByteBufferFactory pooledByteBufferFactory,
       MemoryCache<CacheKey, CloseableImage> bitmapMemoryCache,
@@ -102,6 +105,7 @@ public class ProducerFactory {
     mImageDecoder = imageDecoder;
     mProgressiveJpegConfig = progressiveJpegConfig;
     mDownsampleEnabled = downsampleEnabled;
+    mResizeAndRotateEnabledForNetwork = resizeAndRotateEnabledForNetwork;
 
     mExecutorSupplier = executorSupplier;
     mPooledByteBufferFactory = pooledByteBufferFactory;
@@ -152,6 +156,7 @@ public class ProducerFactory {
         mImageDecoder,
         mProgressiveJpegConfig,
         mDownsampleEnabled,
+        mResizeAndRotateEnabledForNetwork,
         nextProducer);
   }
 
@@ -212,11 +217,20 @@ public class ProducerFactory {
   }
 
   public NetworkFetchProducer newNetworkFetchProducer(NetworkFetcher networkFetcher) {
-    return new NetworkFetchProducer(mPooledByteBufferFactory, mByteArrayPool, networkFetcher);
+    return new NetworkFetchProducer(
+        mPooledByteBufferFactory,
+        mByteArrayPool,
+        networkFetcher);
   }
 
   public static <T> NullProducer<T> newNullProducer() {
     return new NullProducer<T>();
+  }
+
+  public PostprocessedBitmapMemoryCacheProducer newPostprocessorBitmapMemoryCacheProducer(
+      Producer<CloseableReference<CloseableImage>> nextProducer) {
+    return new PostprocessedBitmapMemoryCacheProducer(
+        mBitmapMemoryCache, mCacheKeyFactory, nextProducer);
   }
 
   public PostprocessorProducer newPostprocessorProducer(
@@ -229,7 +243,6 @@ public class ProducerFactory {
     return new ResizeAndRotateProducer(
         mExecutorSupplier.forBackgroundTasks(),
         mPooledByteBufferFactory,
-        mDownsampleEnabled,
         nextProducer);
   }
 

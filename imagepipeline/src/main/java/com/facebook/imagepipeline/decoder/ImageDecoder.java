@@ -11,6 +11,7 @@ package com.facebook.imagepipeline.decoder;
 
 import android.graphics.Bitmap;
 
+import com.facebook.common.internal.Closeables;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.imageformat.GifFormatChecker;
 import com.facebook.imageformat.ImageFormat;
@@ -24,6 +25,8 @@ import com.facebook.imagepipeline.image.EncodedImage;
 import com.facebook.imagepipeline.image.ImmutableQualityInfo;
 import com.facebook.imagepipeline.image.QualityInfo;
 import com.facebook.imagepipeline.memory.PooledByteBufferInputStream;
+
+import java.io.InputStream;
 
 /**
  * Decodes images.
@@ -99,26 +102,33 @@ public class ImageDecoder {
   public CloseableImage decodeGif(
       EncodedImage encodedImage,
       ImageDecodeOptions options) {
-    PooledByteBufferInputStream is = (PooledByteBufferInputStream) encodedImage.getInputStream();
+    InputStream is = encodedImage.getInputStream();
     if (is == null) {
       return null;
     }
-    if (GifFormatChecker.isAnimated(is)) {
-      return mAnimatedImageFactory.decodeGif(encodedImage, options);
+    try {
+      if (GifFormatChecker.isAnimated(is)) {
+        return mAnimatedImageFactory.decodeGif(encodedImage, options);
+      }
+      return decodeStaticImage(encodedImage);
+    } finally {
+      Closeables.closeQuietly(is);
     }
-    return decodeStaticImage(encodedImage);
   }
 
   /**
    * @param encodedImage input image (encoded bytes plus meta data)
    * @return a CloseableStaticBitmap
    */
-  public synchronized CloseableStaticBitmap decodeStaticImage(
+  public CloseableStaticBitmap decodeStaticImage(
       final EncodedImage encodedImage) {
     CloseableReference<Bitmap> bitmapReference =
         mBitmapFactoryWithPool.decodeFromEncodedImage(encodedImage);
     try {
-      return new CloseableStaticBitmap(bitmapReference, ImmutableQualityInfo.FULL_QUALITY);
+      return new CloseableStaticBitmap(
+          bitmapReference,
+          ImmutableQualityInfo.FULL_QUALITY,
+          encodedImage.getRotationAngle());
     } finally {
       bitmapReference.close();
     }
@@ -132,14 +142,17 @@ public class ImageDecoder {
    * @param qualityInfo quality info for the image
    * @return a CloseableStaticBitmap
    */
-  public synchronized CloseableStaticBitmap decodeJpeg(
+  public CloseableStaticBitmap decodeJpeg(
       final EncodedImage encodedImage,
       int length,
       QualityInfo qualityInfo) {
     CloseableReference<Bitmap> bitmapReference =
         mBitmapFactoryWithPool.decodeJPEGFromEncodedImage(encodedImage, length);
     try {
-      return new CloseableStaticBitmap(bitmapReference, qualityInfo);
+      return new CloseableStaticBitmap(
+          bitmapReference,
+          qualityInfo,
+          encodedImage.getRotationAngle());
     } finally {
       bitmapReference.close();
     }
